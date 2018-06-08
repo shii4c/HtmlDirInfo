@@ -126,8 +126,8 @@ public class DirInfoPutter {
 				sizeInfo.totalSize += info.getSize();
 				sizeInfo.count++;
 				// 最近更新したファイル
-				if (oldestUdate_ <= info.getDate()) {
-					newFileList_.add(new FilePathInfo(c.resultInfo.getFileIndex(), c.resultInfo.getPath(), info.getName(), info.getDate()));
+				if (oldestUdate_ <= info.getLastModifiedDate()) {
+					newFileList_.add(new FilePathInfo(c.resultInfo.getFileIndex(), c.resultInfo.getPath(), info.getName(), info.getLastModifiedDate()));
 					if (newFileList_.size() >= NumNewFileList * 2) {
 						Collections.sort(newFileList_);
 						newFileList_.subList(NumNewFileList, newFileList_.size()).clear();
@@ -298,14 +298,14 @@ public class DirInfoPutter {
 				writer.write(
 						"</td>" +
 						"<td align=right>" + fmtSize_.format(dinfo.getSize()) + "</td>" +
-						"<td>" + fmtDate_.format(new Date(info.getDate())) + "</td></tr>\n"
+						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td></tr>\n"
 				);
 			} else {
 				writer.write(
 						" <tr>" +
 						"<td>" + info.getName() + "</td>" +
 						"<td align=right>" + fmtSize_.format(info.getSize()) + "</td>" +
-						"<td>" + fmtDate_.format(new Date(info.getDate())) + "</td></tr>\n"
+						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td></tr>\n"
 				);
 			}
 		}
@@ -432,7 +432,7 @@ public class DirInfoPutter {
 	private static abstract class Info implements Comparable<Info> {
 		public abstract long getSize();
 		public abstract String getName();
-		public abstract long getDate();
+		public abstract long getLastModifiedDate();
 
 		public int compareTo(Info info) {
 			long sgn = info.getSize() - getSize();
@@ -447,17 +447,12 @@ public class DirInfoPutter {
 	private static class FileInfo extends Info {
 		private long size_;
 		private String strFileName_;
-		private long udate_;
+		private long lastModifiedDate_;
 
-		public FileInfo(File file) {
-			strFileName_ = file.getName().intern();
-			size_ = file.length();
-			udate_ = file.lastModified();
-		}
 		public FileInfo(String name, long size, long lastModified) {
 			strFileName_ = name;
 			size_ = size;
-			udate_ = lastModified;
+			lastModifiedDate_ = lastModified;
 		}
 
 		public int compareTo(Info info) {
@@ -467,7 +462,7 @@ public class DirInfoPutter {
 
 		public long getSize() { return size_; }
 		public String getName() { return strFileName_; }
-		public long getDate() { return udate_; }
+		public long getLastModifiedDate() { return lastModifiedDate_; }
 		public int getNonOutputCount() { return 0; }
 	}
 
@@ -475,13 +470,13 @@ public class DirInfoPutter {
 		private String strPath_;
 		private Info[] lstInfo_;
 		private long size_;
-		private long udate_;
+		private long lastModifiedDate_;
 		private int fileIndex_;
 		private int nonOutputCount_;
 
 		public DirInfo(String strPath, long date) {
 			strPath_ = strPath;
-			udate_ = date;
+			lastModifiedDate_ = date;
 
 			size_ = 0;
 		}
@@ -492,7 +487,7 @@ public class DirInfoPutter {
 		}
 
 		public long getSize() { return size_; }
-		public long getDate() { return udate_; }
+		public long getLastModifiedDate() { return lastModifiedDate_; }
 		public String getName() {
 			int pos = strPath_.lastIndexOf(File.separator);
 			if ( pos < 0 ) { return strPath_; }
@@ -508,7 +503,7 @@ public class DirInfoPutter {
 			nonOutputCount_ = 1;
 			for (int i = 0; i < lstInfo.length; i++) {
 				Info info = lstInfo[i];
-				if (udate_ < info.getDate()) { udate_ = info.getDate(); }
+				if (lastModifiedDate_ < info.getLastModifiedDate()) { lastModifiedDate_ = info.getLastModifiedDate(); }
 				size_ += info.getSize();
 				nonOutputCount_ += lstInfo[i].getNonOutputCount() + 1;
 			}
