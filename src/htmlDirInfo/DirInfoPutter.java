@@ -91,7 +91,7 @@ public class DirInfoPutter {
 			public FileVisitResult preVisitDirectory(Path dir,	BasicFileAttributes attrs) throws IOException {
 				ScanContext c = new ScanContext();
 				contextStack.add(c);
-				c.resultInfo = new DirInfo(dir.toString(), attrs.lastModifiedTime().toMillis());
+				c.resultInfo = new DirInfo(dir.toString());
 				if (contextStack.size() <= maxDepth_) {
 					if (fileCount_ >= 2000) {
 						fileCount_ = 0;
@@ -114,7 +114,7 @@ public class DirInfoPutter {
 				ScanContext c = contextStack.get(contextStack.size() - 1);
 				if (contextStack.size() <= maxDepth_) { fileCount_++; }
 				// ファイル
-				FileInfo info = new FileInfo(file.getFileName().toString(),  attrs.size(), attrs.lastModifiedTime().toMillis());
+				FileInfo info = new FileInfo(file.getFileName().toString(),  attrs.size(), attrs.lastModifiedTime().toMillis(), attrs.lastAccessTime().toMillis());
 				c.infoList.add(info);
 				// 拡張子ごとのサイズの更新
 				String strName = info.getName();
@@ -266,7 +266,8 @@ public class DirInfoPutter {
 	}
 
 	private static DecimalFormat fmtSize_ = new DecimalFormat("###,###");
-	private static SimpleDateFormat fmtDate_ = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+	private static SimpleDateFormat fmtDate_ = new SimpleDateFormat("yyyy/MM/dd");
+	//private static SimpleDateFormat fmtDate_ = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 
 	private static void writeHtml(DirInfo dirInfo) throws IOException {
 		if (dirInfo.getNonOutputCount() == 0) { return; }
@@ -277,8 +278,8 @@ public class DirInfoPutter {
 		writer.write("<a name=\"" + toHtmlTag(dirInfo.getPath()) + "\">\n");
 		writer.write("<h2>" + makePathCaption(dirInfo.getPath()) + "</h2>\n");
 
-		writer.write("<table border=1 width=95%>\n");
-		writer.write(" <tr bgcolor=#c0c0c0><td>名前<td width=128px>サイズ</td><td width=168px>更新日時</td></tr>\n");
+		writer.write("<table border=1 style=\"width:95%; table-layout: fixed\">\n");
+		writer.write(" <tr bgcolor=#c0c0c0 width='90%'><td>名前<td width='160px'>サイズ</td><td width='120px'>更新日時</td><td width='120px'>アクセス日時</td></tr>\n");
 
 		Info[] lstInfo = dirInfo.getInfoList().clone();
 		Arrays.sort(lstInfo);
@@ -298,14 +299,16 @@ public class DirInfoPutter {
 				writer.write(
 						"</td>" +
 						"<td align=right>" + fmtSize_.format(dinfo.getSize()) + "</td>" +
-						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td></tr>\n"
+						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td>" +
+						"<td>" + fmtDate_.format(new Date(info.getLastAccessDate())) + "</td></tr>\n"
 				);
 			} else {
 				writer.write(
 						" <tr>" +
 						"<td>" + info.getName() + "</td>" +
 						"<td align=right>" + fmtSize_.format(info.getSize()) + "</td>" +
-						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td></tr>\n"
+						"<td>" + fmtDate_.format(new Date(info.getLastModifiedDate())) + "</td>" +
+						"<td>" + fmtDate_.format(new Date(info.getLastAccessDate())) + "</td></tr>\n"
 				);
 			}
 		}
@@ -433,6 +436,7 @@ public class DirInfoPutter {
 		public abstract long getSize();
 		public abstract String getName();
 		public abstract long getLastModifiedDate();
+		public abstract long getLastAccessDate();
 
 		public int compareTo(Info info) {
 			long sgn = info.getSize() - getSize();
@@ -448,11 +452,13 @@ public class DirInfoPutter {
 		private long size_;
 		private String strFileName_;
 		private long lastModifiedDate_;
+		private long lastAccessDate_;
 
-		public FileInfo(String name, long size, long lastModified) {
+		public FileInfo(String name, long size, long lastModified, long lastAccess) {
 			strFileName_ = name;
 			size_ = size;
 			lastModifiedDate_ = lastModified;
+			lastAccessDate_ = lastAccess;
 		}
 
 		public int compareTo(Info info) {
@@ -463,6 +469,7 @@ public class DirInfoPutter {
 		public long getSize() { return size_; }
 		public String getName() { return strFileName_; }
 		public long getLastModifiedDate() { return lastModifiedDate_; }
+		public long getLastAccessDate() { return lastAccessDate_; }
 		public int getNonOutputCount() { return 0; }
 	}
 
@@ -471,12 +478,12 @@ public class DirInfoPutter {
 		private Info[] lstInfo_;
 		private long size_;
 		private long lastModifiedDate_;
+		private long lastAccessDate_;
 		private int fileIndex_;
 		private int nonOutputCount_;
 
-		public DirInfo(String strPath, long date) {
+		public DirInfo(String strPath) {
 			strPath_ = strPath;
-			lastModifiedDate_ = date;
 
 			size_ = 0;
 		}
@@ -488,6 +495,7 @@ public class DirInfoPutter {
 
 		public long getSize() { return size_; }
 		public long getLastModifiedDate() { return lastModifiedDate_; }
+		public long getLastAccessDate() { return lastAccessDate_; }
 		public String getName() {
 			int pos = strPath_.lastIndexOf(File.separator);
 			if ( pos < 0 ) { return strPath_; }
@@ -504,6 +512,7 @@ public class DirInfoPutter {
 			for (int i = 0; i < lstInfo.length; i++) {
 				Info info = lstInfo[i];
 				if (lastModifiedDate_ < info.getLastModifiedDate()) { lastModifiedDate_ = info.getLastModifiedDate(); }
+				if (lastAccessDate_ < info.getLastAccessDate()) { lastAccessDate_ = info.getLastAccessDate(); }
 				size_ += info.getSize();
 				nonOutputCount_ += lstInfo[i].getNonOutputCount() + 1;
 			}
