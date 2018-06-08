@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 
 
 
@@ -32,10 +31,17 @@ public class DirInfoPutter {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		String strBasePath;
-		if (args.length > 0) {
-			strBasePath = args[0];
-		} else {
+		String strBasePath = null;
+		for (int i = 0; i < args.length; i++) {
+			String arg = args[i];
+			if (arg.equals("-maxDepth")) {
+				maxDepth_ = Integer.parseInt(args[i + 1]);
+				i++;
+			} else {
+				strBasePath = arg;
+			}
+		}
+		if (strBasePath == null) {
 			System.err.println("Usage: ");
 			System.err.println("  java -jar HtmlDirInfoPutter.jar <TargetPath>");
 			return;
@@ -74,8 +80,9 @@ public class DirInfoPutter {
 	private static HashMap<String, FileTypeSizeInfo> mapFileTypeSize_ = new HashMap<String, FileTypeSizeInfo>();
 	//
 	private static long oldestUdate_;
-	private static List<FilePathInfo> newFileList_ = new ArrayList<FilePathInfo>();
+	private static ArrayList<FilePathInfo> newFileList_ = new ArrayList<FilePathInfo>();
 	private static final int NumNewFileList = 500;
+	private static int maxDepth_ = Integer.MAX_VALUE;
 
 	private static DirInfo scan2(String strPath) throws IOException {
 		final ArrayList<ScanContext> contextStack = new ArrayList<>();
@@ -84,26 +91,28 @@ public class DirInfoPutter {
 			public FileVisitResult preVisitDirectory(Path dir,	BasicFileAttributes attrs) throws IOException {
 				ScanContext c = new ScanContext();
 				contextStack.add(c);
-				if (fileCount_ >= 2000) {
-					fileCount_ = 0;
-					currentFileIndex_++;
-					c.isNewIndex = true;
-				} else if (fileCount_ < 0) {
-					fileCount_ = 0;
-					currentFileIndex_ = 1;
-					c.isNewIndex = true;
-				}
 				c.resultInfo = new DirInfo(dir.toString(), attrs.lastModifiedTime().toMillis());
-				c.resultInfo.setFileIndex(currentFileIndex_);
-				mapDirInfo_.put(toHtmlTag(c.resultInfo.getPath()), c.resultInfo);
-				fileCount_++;
+				if (contextStack.size() <= maxDepth_) {
+					if (fileCount_ >= 2000) {
+						fileCount_ = 0;
+						currentFileIndex_++;
+						c.isNewIndex = true;
+					} else if (fileCount_ < 0) {
+						fileCount_ = 0;
+						currentFileIndex_ = 1;
+						c.isNewIndex = true;
+					}
+					c.resultInfo.setFileIndex(currentFileIndex_);
+					mapDirInfo_.put(toHtmlTag(c.resultInfo.getPath()), c.resultInfo);
+					fileCount_++;
+				}
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				ScanContext c = contextStack.get(contextStack.size() - 1);
-				fileCount_++;
+				if (contextStack.size() <= maxDepth_) { fileCount_++; }
 				// ファイル
 				FileInfo info = new FileInfo(file.getFileName().toString(),  attrs.size(), attrs.lastModifiedTime().toMillis());
 				c.infoList.add(info);
@@ -121,7 +130,7 @@ public class DirInfoPutter {
 					newFileList_.add(new FilePathInfo(c.resultInfo.getFileIndex(), c.resultInfo.getPath(), info.getName(), info.getDate()));
 					if (newFileList_.size() >= NumNewFileList * 2) {
 						Collections.sort(newFileList_);
-						newFileList_ = newFileList_.subList(0, NumNewFileList);
+						newFileList_.subList(NumNewFileList, newFileList_.size()).clear();
 						oldestUdate_ = newFileList_.get(NumNewFileList - 1).getDate();
 					}
 				}
@@ -147,7 +156,7 @@ public class DirInfoPutter {
 					System.out.println("Output... index:" + prevC.resultInfo.getFileIndex() + " path=" + prevC.resultInfo.getPath());
 				}
 
-				if (prevC.isNewIndex || prevC.resultInfo.getFileIndex() != 1) {
+				if (prevC.isNewIndex || prevC.resultInfo.getFileIndex() > 1) {
 					outputToHtml(prevC.resultInfo);
 					prevC.resultInfo.markOutput();
 				}
@@ -159,6 +168,10 @@ public class DirInfoPutter {
 				return FileVisitResult.CONTINUE;
 			}
 		});
+		System.out.println("...");
+		for (String key : mapDirInfo_.keySet()) {
+			System.out.println(" " + key);
+		}
 		return contextStack.get(0).resultInfo;
 	}
 	private static class ScanContext {
@@ -220,7 +233,7 @@ public class DirInfoPutter {
 						newFileList_.add(new FilePathInfo(resultInfo.getFileIndex(), resultInfo.getPath(), info.getName(), info.getDate()));
 						if (newFileList_.size() >= NumNewFileList * 2) {
 							Collections.sort(newFileList_);
-							newFileList_ = newFileList_.subList(0, NumNewFileList);
+							newFileList_.subList(NumNewFileList, newFileList_.size()).clear();
 							oldestUdate_ = newFileList_.get(NumNewFileList - 1).getDate();
 						}
 					}
@@ -339,6 +352,7 @@ public class DirInfoPutter {
 
 	private static void writeHtml(DirInfo dirInfo) throws IOException {
 		if (dirInfo.getNonOutputCount() == 0) { return; }
+		if (dirInfo.getFileIndex() == 0) { return; }
 
 		Writer writer = openHtml(dirInfo.getFileIndex());
 
@@ -353,21 +367,28 @@ public class DirInfoPutter {
 		for (Info info : lstInfo) {
 			if (info instanceof DirInfo) {
 				DirInfo dinfo = (DirInfo) info;
+				writer.write(" <tr><td>");
+				if (dinfo.getFileIndex() != 0) {
+					writer.write(
+							"<a href=\"" +
+							getHtmlFileName(dinfo.getFileIndex()) +
+							"#" + toHtmlTag(dinfo.getPath()) + "\">" + dinfo.getName() + "</a>"
+					);
+				} else {
+					writer.write("<font color=\"blue\">" + dinfo.getName() + "</font>");
+				}
 				writer.write(
-						" <tr>" +
-						"<td><a href=\"" +
-						     getHtmlFileName(dinfo.getFileIndex()) +
-						     "#" + toHtmlTag(dinfo.getPath()) + "\">" + dinfo.getName() + "</a></td>" +
+						"</td>" +
 						"<td align=right>" + fmtSize_.format(dinfo.getSize()) + "</td>" +
 						"<td>" + fmtDate_.format(new Date(info.getDate())) + "</td></tr>\n"
-						);
+				);
 			} else {
 				writer.write(
 						" <tr>" +
 						"<td>" + info.getName() + "</td>" +
 						"<td align=right>" + fmtSize_.format(info.getSize()) + "</td>" +
 						"<td>" + fmtDate_.format(new Date(info.getDate())) + "</td></tr>\n"
-						);
+				);
 			}
 		}
 
@@ -445,7 +466,7 @@ public class DirInfoPutter {
 	 */
 	private static void outputNewFileList(File file) throws IOException {
 		Collections.sort(newFileList_);
-		newFileList_ = newFileList_.subList(0, Math.min(NumNewFileList, newFileList_.size()));
+		newFileList_.subList(Math.min(NumNewFileList, newFileList_.size()), newFileList_.size()).clear();
 
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "UTF-8"));
 		writeHeader(writer);
@@ -564,7 +585,7 @@ public class DirInfoPutter {
 		public String getPath() { return strPath_; }
 		public Info[] getInfoList() { return lstInfo_; }
 		public void setInfoList(Info[] lstInfo) {
-			lstInfo_ = lstInfo;
+			if (fileIndex_ != 0) { lstInfo_ = lstInfo; }
 
 			nonOutputCount_ = 1;
 			for (int i = 0; i < lstInfo.length; i++) {
