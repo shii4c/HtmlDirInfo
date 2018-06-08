@@ -174,93 +174,11 @@ public class DirInfoPutter {
 		}
 		return contextStack.get(0).resultInfo;
 	}
+	
 	private static class ScanContext {
 		public boolean isNewIndex = false;
 		public DirInfo resultInfo;
 		public ArrayList<Info> infoList = new ArrayList<>();
-	}
-
-	private static DirInfo scan(String strPath) throws IOException {
-		boolean isNewIndex = false;
-		if (fileCount_ >= 2000) {
-			fileCount_ = 0;
-			currentFileIndex_++;
-			isNewIndex = true;
-		} else if (fileCount_ < 0) {
-			fileCount_ = 0;
-			currentFileIndex_ = 1;
-			isNewIndex = true;
-		}
-
-		File currentFile = new File(strPath);
-		DirInfo resultInfo = new DirInfo(strPath, currentFile.lastModified());
-		resultInfo.setFileIndex(currentFileIndex_);
-		mapDirInfo_.put(toHtmlTag(resultInfo.getPath()), resultInfo);
-
-		ArrayList<Info> infoList = new ArrayList<Info>();
-		File[] files = currentFile.listFiles();
-		if (files == null) {
-			System.err.println("Could not get file list at '" + strPath + "'");
-		}
-
-		fileCount_++;
-
-		if (files != null) {
-			fileCount_ += files.length;
-			for (File file : files) {
-				if (Files.isSymbolicLink(file.toPath())) { continue; }
-				if (file.isDirectory()) {
-					// ディレクトリ
-					String strNextPath = file.getAbsolutePath();
-					if (!strNextPath.equals(".") && !strNextPath.equals("..")) {
-						infoList.add(scan(file.getAbsolutePath()));
-					}
-				} else {
-					// ファイル
-					FileInfo info = new FileInfo(file);
-					infoList.add(info);
-					// 拡張子ごとのサイズの更新
-					String strName = info.getName();
-					String strFileType = "* other *";
-					int pos = strName.lastIndexOf('.');
-					if (pos > 0) { strFileType = strName.substring(pos + 1).toLowerCase(); }
-					FileTypeSizeInfo sizeInfo = mapFileTypeSize_.get(strFileType);
-					if (sizeInfo == null) { mapFileTypeSize_.put(strFileType, sizeInfo = new FileTypeSizeInfo(strFileType)); }
-					sizeInfo.totalSize += info.getSize();
-					sizeInfo.count++;
-					// 最近更新したファイル
-					if (oldestUdate_ <= info.getDate()) {
-						newFileList_.add(new FilePathInfo(resultInfo.getFileIndex(), resultInfo.getPath(), info.getName(), info.getDate()));
-						if (newFileList_.size() >= NumNewFileList * 2) {
-							Collections.sort(newFileList_);
-							newFileList_.subList(NumNewFileList, newFileList_.size()).clear();
-							oldestUdate_ = newFileList_.get(NumNewFileList - 1).getDate();
-						}
-					}
-				}
-			}
-		}
-		//Collections.sort(lstDirInfo);
-		//Collections.sort(lstFileInfo);
-
-
-		Info[] lstInfo = new Info[infoList.size()];
-		int i = 0;
-		for (Info info : infoList) {
-			lstInfo[i++] = info;
-		}
-		resultInfo.setInfoList(lstInfo);
-
-		if (isNewIndex) {
-			System.out.println("Output... index:" + resultInfo.getFileIndex() + " path=" + resultInfo.getPath());
-		}
-
-		if (isNewIndex || resultInfo.getFileIndex() != 1) {
-			outputToHtml(resultInfo);
-			resultInfo.markOutput();
-		}
-
-		return resultInfo;
 	}
 
 
