@@ -37,17 +37,26 @@ public class DirInfoPutter {
 			if (arg.equals("-maxDepth")) {
 				maxDepth_ = Integer.parseInt(args[i + 1]);
 				i++;
+			} else if (arg.equals("-outputDir")) {
+				outputPath_ = new File(args[i + 1]);
+				i++;
 			} else {
 				strBasePath = arg;
 			}
 		}
 		if (strBasePath == null) {
 			System.err.println("Usage: ");
-			System.err.println("  java -jar HtmlDirInfoPutter.jar <TargetPath>");
+			System.err.println("  java -jar HtmlDirInfoPutter.jar [options...] <TargetPath>");
+			System.err.println("Options:");
+			System.err.println("  -outputDir <DirPath>  Specify output directory");
+			System.err.println("  -maxDepth <Number>    Specify max depth of output");
 			return;
 		}
 
 		{
+			if (!outputPath_.exists()) {
+				outputPath_.mkdirs();
+			}
 			File[] files = outputPath_.listFiles();
 			for (File file : files) {
 				if (file.getName().endsWith(".html")) {
@@ -62,9 +71,8 @@ public class DirInfoPutter {
 			scan2(strBasePath);
 			closeHtml();
 
-			outputFileTypeSizeInfo(new File("fileTypeSizeInfo.html"));
-			outputNewFileList(new File("recentUpdatedList.html"));
-			outputIndex(new File("index.html"));
+			outputFileTypeSizeInfo(new File(outputPath_, "fileTypeSizeInfo.html"));
+			outputIndex(new File(outputPath_, "index.html"));
 		} catch(IOException e) {
 			e.printStackTrace();
 			return;
@@ -72,6 +80,7 @@ public class DirInfoPutter {
 		System.out.println("終了");
 	}
 
+	private static long now_ = (new Date().getTime());
 	private static File outputPath_ = new File(".");
 	private static int currentFileIndex_ = 1;
 	private static int fileCount_ = 0;
@@ -79,9 +88,6 @@ public class DirInfoPutter {
 	// 拡張子ごとのサイズ
 	private static HashMap<String, FileTypeSizeInfo> mapFileTypeSize_ = new HashMap<String, FileTypeSizeInfo>();
 	//
-	private static long oldestUdate_;
-	private static ArrayList<FilePathInfo> newFileList_ = new ArrayList<FilePathInfo>();
-	private static final int NumNewFileList = 500;
 	private static int maxDepth_ = Integer.MAX_VALUE;
 
 	private static DirInfo scan2(String strPath) throws IOException {
@@ -125,15 +131,7 @@ public class DirInfoPutter {
 				if (sizeInfo == null) { mapFileTypeSize_.put(strFileType, sizeInfo = new FileTypeSizeInfo(strFileType)); }
 				sizeInfo.totalSize += info.getSize();
 				sizeInfo.count++;
-				// 最近更新したファイル
-				if (oldestUdate_ <= info.getLastModifiedDate()) {
-					newFileList_.add(new FilePathInfo(c.resultInfo.getFileIndex(), c.resultInfo.getPath(), info.getName(), info.getLastModifiedDate()));
-					if (newFileList_.size() >= NumNewFileList * 2) {
-						Collections.sort(newFileList_);
-						newFileList_.subList(NumNewFileList, newFileList_.size()).clear();
-						oldestUdate_ = newFileList_.get(NumNewFileList - 1).getDate();
-					}
-				}
+				
 				return FileVisitResult.CONTINUE;
 			}
 
@@ -363,7 +361,7 @@ public class DirInfoPutter {
 	 * @throws IOException
 	 */
 	private static void outputFileTypeSizeInfo(File file) throws IOException {
-		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "UTF-8"));
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
 		writeHeader(writer);
 
 		writer.write("<h2>拡張子ごとの使用容量</h2>\n");
@@ -380,47 +378,14 @@ public class DirInfoPutter {
 		writer.close();
 	}
 
-	/**
-	 * 最近更新されたファイル一覧を出力します。
-	 * @param file 出力先ファイル
-	 * @throws IOException
-	 */
-	private static void outputNewFileList(File file) throws IOException {
-		Collections.sort(newFileList_);
-		newFileList_.subList(Math.min(NumNewFileList, newFileList_.size()), newFileList_.size()).clear();
-
-		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "UTF-8"));
-		writeHeader(writer);
-
-		writer.write("<h2>最近更新されたファイル一覧</h2>\n");
-		writer.write("<table border=1>\n");
-		writer.write(" <tr bgcolor=#c0c0c0><td>ファイル</td><td width=168px>更新日時</td></tr>\n");
-		for (int i = 0; i < NumNewFileList && i < newFileList_.size(); i++) {
-			FilePathInfo info = newFileList_.get(i);
-			writer.write(" <tr><td>" +
-					"<a href=\"" + getHtmlFileName(info.getBasePathIndex()) +
-					"#" + toHtmlTag(info.getBasePath()) + "\"" +
-					" title=\"" + info.getBasePath() + "\"" +
-					">" +
-					info.getFileName() + "</a>" +
-					"</td><td>" + fmtDate_.format(new Date(info.getDate())) + "</td></tr>\n");
-		}
-
-
-		writer.write("</table>\n");
-
-		writer.write("</html>\n");
-		writer.close();
-	}
 
 	private static void outputIndex(File file) throws IOException {
-		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "UTF-8"));
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
 		writeHeader(writer);
 
 		writer.write("<h2>INDEX</h2>\n");
 		writer.write("<ul>\n");
 		writer.write(" <li><a href='1.html'>ディレクトリの使用状況</a>\n");
-		writer.write(" <li><a href='recentUpdatedList.html'>最近更新されたファイル</a>\n");
 		writer.write(" <li><a href='fileTypeSizeInfo.html'>拡張子ごとの使用容量</a>\n");
 		writer.write("</ul>\n");
 
