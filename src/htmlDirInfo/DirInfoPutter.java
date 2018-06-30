@@ -72,6 +72,7 @@ public class DirInfoPutter {
 			closeHtml();
 
 			outputFileTypeSizeInfo(new File(outputPath_, "fileTypeSizeInfo.html"));
+			outputDeactiveDirInfo(new File(outputPath_, "deactiveDirInfo.html"));
 			outputIndex(new File(outputPath_, "index.html"));
 		} catch(IOException e) {
 			e.printStackTrace();
@@ -87,6 +88,12 @@ public class DirInfoPutter {
 	private static HashMap<String, DirInfo> mapDirInfo_ = new HashMap<String, DirInfo>();
 	// 拡張子ごとのサイズ
 	private static HashMap<String, FileTypeSizeInfo> mapFileTypeSize_ = new HashMap<String, FileTypeSizeInfo>();
+	//
+	private static StatInfo[] statInfoList_ = {
+		new StatInfo("3ヶ月以上", 1000L * 86400 * 30 * 3),	
+		new StatInfo("6ヶ月以上", 1000L * 86400 * 30 * 6),	
+		new StatInfo("1年以上"  , 1000L * 86400 * 30 * 12),	
+	};
 	//
 	private static int maxDepth_ = Integer.MAX_VALUE;
 
@@ -162,6 +169,13 @@ public class DirInfoPutter {
 					contextStack.remove(contextStack.size() - 1);
 					ScanContext c = contextStack.get(contextStack.size() - 1);
 					c.infoList.add(prevC.resultInfo);
+					
+					if (prevC.resultInfo.getSize() > 16 * 1024 * 1024) {
+						DirPathInfo dirPathInfo = new DirPathInfo(prevC.resultInfo);
+						for (StatInfo statInfo : statInfoList_) {
+							statInfo.put(dirPathInfo);
+						}
+					}
 				}
 				return FileVisitResult.CONTINUE;
 			}
@@ -377,6 +391,48 @@ public class DirInfoPutter {
 		writer.write("</html>\n");
 		writer.close();
 	}
+	
+	private static void outputDeactiveDirInfo(File file) throws IOException {
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
+		writeHeader(writer);
+
+		for (StatInfo statInfo : statInfoList_) {
+			writer.write("<h2>" + statInfo.getTitle() + "</h2>\n");
+			writer.write("<table border=1 style=\"width:95%; table-layout: fixed\">\n");
+			writer.write(" <tr bgcolor=#c0c0c0 width='90%'><td>ディレクトリ<td width='160px'>サイズ</td><td width='120px'>アクセス日時</td></tr>\n");
+			int counts = 50;
+			for (DirPathInfo dirPathInfo : statInfo.getDirList()) {
+				// dir path
+				writer.write(" <tr>");
+				writer.write("<td>");
+				if (dirPathInfo.getFileIndex() > 0) {
+					writer.write(
+							"<a href=\"" +
+							getHtmlFileName(dirPathInfo.getFileIndex()) +
+							"#" + toHtmlTag(dirPathInfo.getDirPath()) + "\">" + dirPathInfo.getDirPath() + "</a>"
+					);
+				} else {
+					writer.write(dirPathInfo.getDirPath());
+				}
+				writer.write("</td>");
+				// サイズ
+				writer.write("<td align=\"right\">");
+				writer.write(fmtSize_.format(dirPathInfo.getSize()));
+				writer.write("</td>");
+				// 
+				writer.write("<td>");
+				writer.write(fmtDate_.format(new Date(dirPathInfo.getLastAccessDate())));
+				writer.write("</td>\n");
+				
+				if (counts-- <= 0) { break; }
+			}
+			writer.write("</table>\n");
+			
+		}
+		writer.write("<br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br>\n");
+		writer.write("</html>\n");
+		writer.close();
+	}
 
 
 	private static void outputIndex(File file) throws IOException {
@@ -387,6 +443,7 @@ public class DirInfoPutter {
 		writer.write("<ul>\n");
 		writer.write(" <li><a href='1.html'>ディレクトリの使用状況</a>\n");
 		writer.write(" <li><a href='fileTypeSizeInfo.html'>拡張子ごとの使用容量</a>\n");
+		writer.write(" <li><a href='deactiveDirInfo.html'>使っていないディレクトリ一覧</a>\n");
 		writer.write("</ul>\n");
 
 		writer.write("</html>\n");
@@ -514,30 +571,80 @@ public class DirInfoPutter {
 			return 0;
 		}
 	}
+	
+	private static class StatInfo {
+		private String title_;
+		private long time_;
+		private ArrayList<DirPathInfo> dirList_ = new ArrayList<>();
+		private long limitMinSize_ = 1024 * 1024;
+		private int limitSize_ = 400;
+		
+		public StatInfo(String title, long time) {
+			title_ = title;
+			time_ = time;
+		}
+		
+		public String getTitle() { return title_; }
+		
+		public ArrayList<DirPathInfo> getDirList() {
+			Collections.sort(dirList_);
+			int i = 1;
+			loop:
+			while(i < dirList_.size()) {
+				String dirPath = dirList_.get(i).getDirPath();
+				for (int j = 0; j < i; j++) {
+					if (dirPath.startsWith(dirList_.get(j).getDirPath() + "/")) {
+						dirList_.remove(i);
+						continue loop;
+					}
+				}
+				i++;
+			}
+			return dirList_;
+		}
+		
+		public void put(DirPathInfo dirPathInfo) {
+			if (dirPathInfo.getSize() < limitMinSize_) { return; }
+			if (dirPathInfo.getLastAccessDate() >= now_ - time_) { return; }
+			dirList_.add(dirPathInfo);
+			if (dirList_.size() > limitSize_) {
+				Collections.sort(dirList_);
+				DirPathInfo last = dirList_.get(dirList_.size() - 1);
+				if (last.getSize() > limitMinSize_) { limitMinSize_ = last.getSize(); }
+				for (int i = dirList_.size() - 1; i > limitSize_ / 2; i--) {
+					dirList_.remove(i);
+				}
+			}
+		}
+	}
 
-	private static class FilePathInfo implements Comparable<FilePathInfo> {
-		private String basePath_;
-		private String fileName_;
-		private int basePathIndex_;
-		private long udate_;
+	private static class DirPathInfo implements Comparable<DirPathInfo> {
+		private String dirPath_;
+		private int fileIndex_;
+		private long lastAccessDate_;
+		private long size_;
 
-		public FilePathInfo(int basePathIndex, String basePath, String fileName, long udate) {
-			basePathIndex_ = basePathIndex;
-			basePath_ = basePath;
-			fileName_ = fileName;
-			udate_ = udate;
+		public DirPathInfo(DirInfo dirInfo) {
+			size_ = dirInfo.getSize();
+			lastAccessDate_ = dirInfo.getLastAccessDate();
+			dirPath_ = dirInfo.getPath();
+			fileIndex_ = dirInfo.getFileIndex();
 		}
 
-		public int compareTo(FilePathInfo info) {
-			long sgn = info.udate_ - udate_;
+		public int compareTo(DirPathInfo info) {
+			long sgn = info.size_ - size_;
 			if (sgn > 0) { return 1; }
 			if (sgn < 0) { return -1; }
+			int sgnLen = info.dirPath_.length() - dirPath_.length();
+			if (sgnLen > 0) { return -1; }
+			if (sgnLen < 0) { return  1; }
 			return 0;
 		}
+		
+		public String getDirPath() { return dirPath_; }
+		public int getFileIndex() { return fileIndex_; }
+		public long getLastAccessDate() { return lastAccessDate_; }
+		public long getSize() { return size_; }
 
-		public long getDate() { return udate_; }
-		public String getBasePath() { return basePath_; }
-		public String getFileName() { return fileName_; }
-		public int getBasePathIndex() { return basePathIndex_; }
 	}
 }
