@@ -90,9 +90,10 @@ public class DirInfoPutter {
 	private static HashMap<String, FileTypeSizeInfo> mapFileTypeSize_ = new HashMap<String, FileTypeSizeInfo>();
 	//
 	private static StatInfo[] statInfoList_ = {
-		new StatInfo("3ヶ月以上", 1000L * 86400 * 30 * 3),	
+		//new StatInfo("3ヶ月以上", 1000L * 86400 * 30 * 3),	
 		new StatInfo("6ヶ月以上", 1000L * 86400 * 30 * 6),	
 		new StatInfo("1年以上"  , 1000L * 86400 * 30 * 12),	
+		new StatInfo("2年以上"  , 1000L * 86400 * 30 * 24),	
 	};
 	//
 	private static int maxDepth_ = Integer.MAX_VALUE;
