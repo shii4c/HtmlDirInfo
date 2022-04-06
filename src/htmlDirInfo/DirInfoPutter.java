@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.regex.Pattern;
 
 
 
@@ -40,6 +41,9 @@ public class DirInfoPutter {
 			} else if (arg.equals("-outputDir")) {
 				outputPath_ = new File(args[i + 1]);
 				i++;
+			} else if (arg.equals("-ignoreDir")) {
+				ignoreDirPattern_ = Pattern.compile(args[i + 1]);
+				i++;
 			} else {
 				strBasePath = arg;
 			}
@@ -49,7 +53,8 @@ public class DirInfoPutter {
 			System.err.println("  java -jar HtmlDirInfoPutter.jar [options...] <TargetPath>");
 			System.err.println("Options:");
 			System.err.println("  -outputDir <DirPath>  Specify output directory");
-			System.err.println("  -maxDepth <Number>    Specify max depth of output");
+			System.err.println("  -maxDepth  <Number>   Specify max depth of output");
+			System.err.println("  -ignoreDir <regex>    Specify ignore directory name pattern");
 			return;
 		}
 
@@ -90,19 +95,23 @@ public class DirInfoPutter {
 	private static HashMap<String, FileTypeSizeInfo> mapFileTypeSize_ = new HashMap<String, FileTypeSizeInfo>();
 	//
 	private static StatInfo[] statInfoList_ = {
-		//new StatInfo("3ヶ月以上", 1000L * 86400 * 30 * 3),	
-		new StatInfo("6ヶ月以上", 1000L * 86400 * 30 * 6),	
-		new StatInfo("1年以上"  , 1000L * 86400 * 30 * 12),	
-		new StatInfo("2年以上"  , 1000L * 86400 * 30 * 24),	
+		//new StatInfo("3ヶ月以上", 1000L * 86400 * 30 * 3),
+		new StatInfo("6ヶ月以上", 1000L * 86400 * 30 * 6),
+		new StatInfo("1年以上"  , 1000L * 86400 * 30 * 12),
+		new StatInfo("2年以上"  , 1000L * 86400 * 30 * 24),
 	};
 	//
 	private static int maxDepth_ = Integer.MAX_VALUE;
+	private static Pattern ignoreDirPattern_;
 
 	private static DirInfo scan2(String strPath) throws IOException {
 		final ArrayList<ScanContext> contextStack = new ArrayList<>();
 		Files.walkFileTree(Paths.get(strPath), new FileVisitor<Path>() {
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir,	BasicFileAttributes attrs) throws IOException {
+				if (ignoreDirPattern_ != null && ignoreDirPattern_.matcher(dir.getFileName().toString()).matches()) {
+					return FileVisitResult.SKIP_SUBTREE;
+				}
 				ScanContext c = new ScanContext();
 				contextStack.add(c);
 				c.resultInfo = new DirInfo(dir.toString());
@@ -139,7 +148,7 @@ public class DirInfoPutter {
 				if (sizeInfo == null) { mapFileTypeSize_.put(strFileType, sizeInfo = new FileTypeSizeInfo(strFileType)); }
 				sizeInfo.totalSize += info.getSize();
 				sizeInfo.count++;
-				
+
 				return FileVisitResult.CONTINUE;
 			}
 
@@ -170,7 +179,7 @@ public class DirInfoPutter {
 					contextStack.remove(contextStack.size() - 1);
 					ScanContext c = contextStack.get(contextStack.size() - 1);
 					c.infoList.add(prevC.resultInfo);
-					
+
 					if (prevC.resultInfo.getSize() > 16 * 1024 * 1024) {
 						DirPathInfo dirPathInfo = new DirPathInfo(prevC.resultInfo);
 						for (StatInfo statInfo : statInfoList_) {
@@ -187,7 +196,7 @@ public class DirInfoPutter {
 		}
 		return contextStack.get(0).resultInfo;
 	}
-	
+
 	private static class ScanContext {
 		public boolean isNewIndex = false;
 		public DirInfo resultInfo;
@@ -392,7 +401,7 @@ public class DirInfoPutter {
 		writer.write("</html>\n");
 		writer.close();
 	}
-	
+
 	private static void outputDeactiveDirInfo(File file) throws IOException {
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
 		writeHeader(writer);
@@ -420,15 +429,15 @@ public class DirInfoPutter {
 				writer.write("<td align=\"right\">");
 				writer.write(fmtSize_.format(dirPathInfo.getSize()));
 				writer.write("</td>");
-				// 
+				//
 				writer.write("<td>");
 				writer.write(fmtDate_.format(new Date(dirPathInfo.getLastAccessDate())));
 				writer.write("</td>\n");
-				
+
 				if (counts-- <= 0) { break; }
 			}
 			writer.write("</table>\n");
-			
+
 		}
 		writer.write("<br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br> <br>\n");
 		writer.write("</html>\n");
@@ -572,21 +581,21 @@ public class DirInfoPutter {
 			return 0;
 		}
 	}
-	
+
 	private static class StatInfo {
 		private String title_;
 		private long time_;
 		private ArrayList<DirPathInfo> dirList_ = new ArrayList<>();
 		private long limitMinSize_ = 1024 * 1024;
 		private int limitSize_ = 400;
-		
+
 		public StatInfo(String title, long time) {
 			title_ = title;
 			time_ = time;
 		}
-		
+
 		public String getTitle() { return title_; }
-		
+
 		public ArrayList<DirPathInfo> getDirList() {
 			Collections.sort(dirList_);
 			int i = 1;
@@ -603,7 +612,7 @@ public class DirInfoPutter {
 			}
 			return dirList_;
 		}
-		
+
 		public void put(DirPathInfo dirPathInfo) {
 			if (dirPathInfo.getSize() < limitMinSize_) { return; }
 			if (dirPathInfo.getLastAccessDate() >= now_ - time_) { return; }
@@ -641,7 +650,7 @@ public class DirInfoPutter {
 			if (sgnLen < 0) { return  1; }
 			return 0;
 		}
-		
+
 		public String getDirPath() { return dirPath_; }
 		public int getFileIndex() { return fileIndex_; }
 		public long getLastAccessDate() { return lastAccessDate_; }
